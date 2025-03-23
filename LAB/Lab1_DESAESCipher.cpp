@@ -321,7 +321,7 @@ int selectIVSize(int modeNumber)
 string getAuthData()
 {
 	wstring wGetData = L"";
-	wcout << L"Nhập dữ liệu: ";
+	wcout << L"Please provide your input: ";
 	fflush(stdin);
 #ifdef __linux__
 	getline(wcin, wGetData);
@@ -994,17 +994,17 @@ int main(int argc, char *argv[])
         wcout << L"--------------------------------------------------------------------------------" << endl;
         wcout << L"This is the result" << endl
               << endl;
-        wcout << L"plaintext: " << wplaintext << endl;
+        //wcout << L"plaintext: " << wplaintext << endl;
         wcout << L"key: ";
         BeautifulPrinter(key);
         if (mode > 1)
         {
             wcout << L"iv: ";
-            BeautifulPrinter(iv);
+            //BeautifulPrinter(iv);
         }
-        wcout << L"ciphertext: ";
-        BeautifulPrinter(ciphertext);
-        wcout << L"recovertext: " << s2ws(recovertext) << endl;
+        //wcout << L"ciphertext: ";
+        //BeautifulPrinter(ciphertext);
+        //wcout << L"recovertext: " << s2ws(recovertext) << endl;
         if (mode == 7 || mode == 8)
         {
             wcout << L"recoverauth: " << s2ws(recoverauth) << endl;
