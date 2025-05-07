@@ -13,9 +13,9 @@
   "${fileDirname}\\${fileBasenameNoExtension}.exe", 
     "-D_WIN32_WINNT=0x0501", 
                   "-pthread", 
-                  "-L${workspaceFolder}\\LAB\\lib\\cryptopp\\gcc", 
+                  "-L${workspaceFolder}\\lib\\cryptopp\\gcc", 
                   "-l:libcryptopp.a", 
-                                "-I${workspaceFolder}\\LAB\\include\\cryptopp", 
+                                "-I${workspaceFolder}\\include\\cryptopp", 
                   "-Wall", 
             ], 
             "options": { 
