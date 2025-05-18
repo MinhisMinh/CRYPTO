@@ -8,8 +8,8 @@ known = b'crypto{'
 
 # XOR first part to verify the key pattern
 partial_key = xor(data[:], known)
-print(f"Partial key found: {partial_key.decode()}")  # Should show 'myXORke'
+print(f"Partial key found: {partial_key.decode()}")  # Should show 'myXORkey'
 
 xor(data, partial_key)  # XOR the entire data with the found key
-print(f"Decrypted data: {xor(data, partial_key).decode()}")  # Should show the decrypted flag
+print(f"Decrypted data: {xor(data, "myXORkey").decode()}")  # Should show the decrypted flag
 # The above code is a more efficient way to find the key and decrypt the data.
