@@ -173,103 +173,116 @@ void GenerateAndSaveRSAKeys(int keySize, const char *format, const char *private
 // Encryption
 string RSAencrypt(const string format, const char *publicKeyFile, const char *PlaintextFile, const char *CipherFile)
 {
-    // Load public key
-    RSA::PublicKey rsaPublic;
-    if (format == "DER") {
-        LoadPublicKey(publicKeyFile, rsaPublic);
-    } else if (format == "PEM") {
-        LoadPEMPublicKey(publicKeyFile, rsaPublic);
-    } else {
-        cout << "Unsupported format" << endl;
+    try {
+        RSA::PublicKey rsaPublic;
+        if (format == "DER") {
+            LoadPublicKey(publicKeyFile, rsaPublic);
+        } else if (format == "PEM") {
+            LoadPEMPublicKey(publicKeyFile, rsaPublic);
+        } else {
+            throw runtime_error("Unsupported format");
+        }
+
+        RSAES_OAEP_SHA_Encryptor e(rsaPublic);
+        size_t maxMsgLength = e.FixedMaxPlaintextLength();
+        size_t blockSize = e.FixedCiphertextLength();
+
+        string plain;
+        FileSource(PlaintextFile, true, new StringSink(plain));
+
+        string cipher;
+        AutoSeededRandomPool rng;
+
+        for (size_t i = 0; i < plain.size(); i += maxMsgLength) {
+            string chunk = plain.substr(i, std::min(maxMsgLength, plain.size() - i));
+            string encrypted_block;
+            StringSource(chunk, true,
+                new PK_EncryptorFilter(rng, e,
+                    new StringSink(encrypted_block)
+                )
+            );
+            // Ensure each encrypted block is exactly blockSize bytes
+            if (encrypted_block.size() != blockSize) {
+                throw runtime_error("Encrypted block size mismatch");
+            }
+            cipher += encrypted_block;
+        }
+
+        // Only write to file if CipherFile is not empty
+        if (CipherFile && strlen(CipherFile) > 0) {
+            ofstream out(CipherFile, std::ios::binary | std::ios::trunc);
+            if (!out) throw runtime_error("Cannot open output file for writing: " + string(CipherFile));
+            out.write(cipher.c_str(), cipher.length());
+            out.close();
+        }
+
+        return cipher;
+    }
+    catch (const CryptoPP::Exception& e) {
+        cerr << "Crypto++ error: " << e.what() << endl;
         return "";
     }
-
-    // Get maximum message length for RSA-OAEP
-    RSAES_OAEP_SHA_Encryptor e(rsaPublic);
-    size_t maxMsgLength = e.FixedMaxPlaintextLength();
-    
-    // Read input file in chunks
-    string plain, cipher, hex_cipher;
-    FileSource(PlaintextFile, true, new StringSink(plain));
-    
-    // Process file in chunks
-    AutoSeededRandomPool rng;
-    for(size_t pos = 0; pos < plain.length(); pos += maxMsgLength) {
-        // Get chunk of appropriate size
-        string chunk = plain.substr(pos, maxMsgLength);
-        
-        // Encrypt chunk
-        string encrypted_chunk;
-        StringSource(chunk, true,
-            new PK_EncryptorFilter(rng, e,
-                new StringSink(encrypted_chunk))
-        );
-        
-        // Add chunk length and encrypted chunk to output
-        cipher += encrypted_chunk;
+    catch (const std::exception& e) {
+        cerr << "Standard error: " << e.what() << endl;
+        return "";
     }
-
-    // Save complete ciphertext
-    StringSource(cipher, true, new FileSink(CipherFile));
-
-    // Convert to hex for display
-    StringSource(cipher, true,
-        new HexEncoder(
-            new StringSink(hex_cipher)
-        )
-    );
-
-    return hex_cipher;
 }
 
 // Decryption
 string RSAdecrypt(const string format, const char *secretKeyFile, const char *CipherFile, const char *PlaintextFile)
 {
-    // Load private key
-    RSA::PrivateKey rsaPrivate;
-    if (format == "DER")
-        LoadPrivateKey(secretKeyFile, rsaPrivate);
-    else if (format == "PEM")
-        LoadPEMPrivateKey(secretKeyFile, rsaPrivate);
-    else {
-        cout << "Unsupported format" << endl;
+    try {
+        RSA::PrivateKey rsaPrivate;
+        if (format == "DER")
+            LoadPrivateKey(secretKeyFile, rsaPrivate);
+        else if (format == "PEM")
+            LoadPEMPrivateKey(secretKeyFile, rsaPrivate);
+        else
+            throw runtime_error("Unsupported format");
+
+        RSAES_OAEP_SHA_Decryptor d(rsaPrivate);
+        size_t blockSize = d.FixedCiphertextLength();
+
+        string cipher;
+        FileSource(CipherFile, true, new StringSink(cipher));
+
+        if (cipher.size() % blockSize != 0) {
+            throw runtime_error("Ciphertext length " + std::to_string(cipher.size()) +
+                " is not a multiple of block size " + std::to_string(blockSize));
+        }
+
+        string recovered;
+        AutoSeededRandomPool rng;
+
+        for (size_t i = 0; i < cipher.size(); i += blockSize) {
+            string block = cipher.substr(i, blockSize);
+            string decrypted_block;
+            StringSource(block, true,
+                new PK_DecryptorFilter(rng, d,
+                    new StringSink(decrypted_block)
+                )
+            );
+            recovered += decrypted_block;
+        }
+
+        // Only write to file if PlaintextFile is not empty
+        if (PlaintextFile && strlen(PlaintextFile) > 0) {
+            ofstream out(PlaintextFile, std::ios::binary | std::ios::trunc);
+            if (!out) throw runtime_error("Cannot open output file for writing: " + string(PlaintextFile));
+            out.write(recovered.c_str(), recovered.length());
+            out.close();
+        }
+
+        return recovered;
+    }
+    catch (const CryptoPP::Exception& e) {
+        cerr << "Crypto++ error: " << e.what() << endl;
         return "";
     }
-
-    // Get RSA parameters
-    RSAES_OAEP_SHA_Decryptor d(rsaPrivate);
-    size_t cipherBlockSize = d.FixedCiphertextLength();  // Block size for RSA-OAEP
-
-    // Read encrypted data
-    string cipher;
-    FileSource(CipherFile, true, new StringSink(cipher));
-
-    // Verify total length is multiple of block size
-    if (cipher.length() % cipherBlockSize != 0) {
-        throw runtime_error("Invalid ciphertext length");
+    catch (const std::exception& e) {
+        cerr << "Standard error: " << e.what() << endl;
+        return "";
     }
-
-    string recovered;
-    AutoSeededRandomPool rng;
-
-    // Process each block
-    for (size_t pos = 0; pos < cipher.length(); pos += cipherBlockSize) {
-        string block = cipher.substr(pos, cipherBlockSize);
-        
-        // Decrypt block
-        string decrypted_block;
-        StringSource(block, true,
-            new PK_DecryptorFilter(rng, d,
-                new StringSink(decrypted_block))
-        );
-        
-        recovered += decrypted_block;
-    }
-
-    // Save decrypted result
-    StringSource(recovered, true, new FileSink(PlaintextFile));
-
-    return recovered;
 }
 
 int main(int argc, char **argv)
@@ -297,42 +310,41 @@ int main(int argc, char **argv)
 	}
 	else if (mode == "enc" && argc == 6)
 	{
-		string cipher = RSAencrypt(argv[2], argv[3], argv[4], argv[5]);
-		//cout << "Cipher text: " << cipher << endl;
-		cout << "Do you want to encrypt 10000 times? (y/n) ";
-		char c;
-		std::cin >> c;
-		if (c == 'y')
-		{
-			auto start = std::chrono::high_resolution_clock::now();
-			for (int i = 0; i < 10000; i++)
-			{
-				string cipher = RSAencrypt(argv[2], argv[3], argv[4], argv[5]);
-				// cout << "Round: " << i << endl;
-			}
-			auto end = std::chrono::high_resolution_clock::now();
-			auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-			double averageTime = static_cast<double>(duration) / 10000.0;
-			std::cout << "Total time for over 10000 rounds: " << static_cast<double>(duration) << " ms" << std::endl;
-			std::cout << "Average time for over 10000 rounds: " << averageTime << " ms" << std::endl;
-		}
-		else if (c == 'n')
-		{
-			cout << "Goodbye!" << endl;
-		}
-		else
-		{
-			cout << "Invalid input" << endl;
-		}
+	    // Write to file ONCE
+	    string cipher = RSAencrypt(argv[2], argv[3], argv[4], argv[5]);
+	    cout << "Do you want to encrypt 10000 times? (y/n) ";
+	    char c;
+	    std::cin >> c;
+	    if (c == 'y')
+	    {
+	        auto start = std::chrono::high_resolution_clock::now();
+	        for (int i = 0; i < 10000; i++)
+	        {
+	            // Encrypt in memory, do NOT write to file
+	            string cipher = RSAencrypt(argv[2], argv[3], argv[4], "");
+	        }
+	        auto end = std::chrono::high_resolution_clock::now();
+	        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+	        double averageTime = static_cast<double>(duration) / 10000.0;
+	        std::cout << "Total time for over 10000 rounds: " << static_cast<double>(duration) << " ms" << std::endl;
+	        std::cout << "Average time for over 10000 rounds: " << averageTime << " ms" << std::endl;
+	    }
+	    else if (c == 'n')
+	    {
+	        cout << "Goodbye!" << endl;
+	    }
+	    else
+	    {
+	        cout << "Invalid input" << endl;
+	    }
 	}
 	else if (mode == "dec")
 	{
 		const string format = argv[2];
 		const char *private_key = argv[3];
-		const char *cipher = argv[5];
-		const char *plain = argv[4];
+		const char *cipher = argv[4];
+		const char *plain = argv[5];
 		string plaintext = RSAdecrypt(format, private_key, cipher, plain);
-		//cout << "Plaintext: " << plaintext << endl;
 		cout << "Do you want to decrypt 10000 times? (y/n) ";
 		char c;
 		std::cin >> c;
@@ -341,8 +353,8 @@ int main(int argc, char **argv)
 			auto start = std::chrono::high_resolution_clock::now();
 			for (int i = 0; i < 10000; i++)
 			{
-				string palin = RSAdecrypt(format, private_key, cipher, plain);
-				// cout << "Round: " << i << endl;
+				// Decrypt in memory, do NOT write to file
+				string palin = RSAdecrypt(format, private_key, cipher, "");
 			}
 			auto end = std::chrono::high_resolution_clock::now();
 			auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();

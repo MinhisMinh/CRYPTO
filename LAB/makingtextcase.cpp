@@ -14,11 +14,27 @@ char getRandomChar() {
     return CHARSET[rand() % CHARSET_SIZE];
 }
 
-// Function to generate a file of given size in KB or MB
+// Modified function to handle bytes (B), kilobytes (K), and megabytes (M)
 void generateFile(const string& filename, int size, char unit) {
     const int KB = 1024;         // 1KB = 1024 bytes
     const int MB = 1024 * KB;    // 1MB = 1024 KB
-    int fileSize = (unit == 'K') ? (size * KB) : (size * MB);
+    int fileSize;
+    
+    // Calculate file size based on unit
+    switch(toupper(unit)) {
+        case 'B':
+            fileSize = size;
+            break;
+        case 'K':
+            fileSize = size * KB;
+            break;
+        case 'M':
+            fileSize = size * MB;
+            break;
+        default:
+            cerr << "Invalid unit! Use 'B' for bytes, 'K' for KB, or 'M' for MB.\n";
+            return;
+    }
 
     ofstream outFile(filename, ios::binary);
     if (!outFile) {
@@ -26,12 +42,13 @@ void generateFile(const string& filename, int size, char unit) {
         return;
     }
 
-    srand(static_cast<unsigned>(time(0))); // Seed the random generator
+    srand(static_cast<unsigned>(time(0)));
 
-    cout << "Generating file: " << filename << " (" << size << unit << "B)...\n";
+    cout << "Generating file: " << filename << " (" << size << unit << ")...\n";
 
-    // Write data in chunks for efficiency
-    const int BUFFER_SIZE = 1024 * 1024; // 1MB buffer for efficiency
+    // Adjust buffer size for small files
+    const int MAX_BUFFER_SIZE = 1024 * 1024; // 1MB
+    const int BUFFER_SIZE = min(MAX_BUFFER_SIZE, fileSize);
     char* buffer = new char[BUFFER_SIZE];
 
     for (int written = 0; written < fileSize; written += BUFFER_SIZE) {
@@ -45,17 +62,19 @@ void generateFile(const string& filename, int size, char unit) {
     delete[] buffer;
     outFile.close();
     cout << "File generated successfully: " << filename << endl;
+    cout << "Actual size: " << fileSize << " bytes" << endl;
 }
 
+// Modified main function to handle bytes
 int main() {
     int size;
     char unit;
 
-    cout << "Enter file size (e.g., 10K for 10KB, 1M for 1MB): ";
+    cout << "Enter file size (e.g., 512B for bytes, 10K for KB, 1M for MB): ";
     cin >> size >> unit;
 
-    if (unit != 'K' && unit != 'M') {
-        cerr << "Invalid size unit! Use 'K' for KB or 'M' for MB.\n";
+    if (toupper(unit) != 'B' && toupper(unit) != 'K' && toupper(unit) != 'M') {
+        cerr << "Invalid size unit! Use 'B' for bytes, 'K' for KB, or 'M' for MB.\n";
         return 1;
     }
 
